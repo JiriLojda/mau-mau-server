@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta name="description" content="Testing web sockets" />
+  <meta charset="utf-8">
+  <title>Testing web sockets</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+  <body>
+    <div style="width: 100%; display: flex; justify-content: stretch; gap: 50px">
+      <div style="flex-grow: 1; white-space: pre-wrap; max-width: 50%">
+        <h1>Incomming messages</h1>
+        <div id="incommingMessages"></div>
+      </div>
+      <div style="flex-grow: 1; white-space: pre-wrap; max-width: 50%">
+        <h1>Outgoing messages</h1>
+        <div id="outgoingMessages"></div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: start; gap: 10px; flex-direction: column">
+      <textarea id="msgInput" rows="8" cols="80">{ "type": "logIn"&#13&#10, "userName": "testUser"&#13&#10}&#13&#10</textarea>
+      <button style="padding: 8px" type="button" id="msgButton">Send</button>
+    </div>
+  
+
+<script>
+    const socket = new WebSocket("ws://localhost:9160");
+
+    // socket.addEventListener("open", () => socket.send(`userName: ${userName}`));
+
+    socket.addEventListener("message", event => {
+      document.getElementById("incommingMessages").textContent += `${event.data}\n`;
+    });
+
+    document.getElementById("msgButton")
+      .addEventListener("click", () => {
+        const msg = document.getElementById("msgInput").value
+        document.getElementById("outgoingMessages").textContent += `${msg}\n`;
+
+        socket.send(msg);
+      });
+</script>
+
+</body>
+</html>

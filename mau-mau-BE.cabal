@@ -1,0 +1,97 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.1.
+--
+-- see: https://github.com/sol/hpack
+
+name:           mau-mau-BE
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/JiriLojda/mau-mau-BE#readme>
+homepage:       https://github.com/JiriLojda/mau-mau-BE#readme
+bug-reports:    https://github.com/JiriLojda/mau-mau-BE/issues
+author:         JiriLojda
+maintainer:     lojdaj@seznam.cz
+copyright:      2023 Jiri Lojda
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/JiriLojda/mau-mau-BE
+
+library
+  exposed-modules:
+      MauMau
+      MauMau.Cards
+      MauMau.Constants
+      MauMau.State
+      MauMau.StateValidation
+      Server
+      Server.Message
+      Server.ResponseModels
+      Server.State
+      Utils.List
+  other-modules:
+      Paths_mau_mau_BE
+  hs-source-dirs:
+      src
+  default-extensions:
+      StrictData
+      OverloadedRecordDot
+      DuplicateRecordFields
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , random
+    , stm
+    , text
+    , uuid
+    , websockets
+  default-language: GHC2021
+
+executable mau-mau-BE-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_mau_mau_BE
+  hs-source-dirs:
+      app
+  default-extensions:
+      StrictData
+      OverloadedRecordDot
+      DuplicateRecordFields
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , mau-mau-BE
+  default-language: GHC2021
+
+test-suite mau-mau-BE-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      MauMauSpec
+      Paths_mau_mau_BE
+  hs-source-dirs:
+      test
+  default-extensions:
+      StrictData
+      OverloadedRecordDot
+      DuplicateRecordFields
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , base >=4.7 && <5
+    , containers
+    , hedgehog
+    , hspec
+    , hspec-discover
+    , hspec-hedgehog
+    , mau-mau-BE
+    , text
+  default-language: GHC2021
