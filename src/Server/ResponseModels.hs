@@ -20,7 +20,9 @@ import MauMau qualified as MM
 import MauMau.State qualified as MMS
 import MauMau.StateValidation qualified as MMV
 
-import Data.Aeson (FromJSON, ToJSON (toJSON))
+import Data.Aeson (FromJSON, ToJSON (toJSON), genericParseJSON, genericToEncoding, genericToJSON)
+import Data.Aeson qualified as Aeson
+import Data.Char qualified as Char
 import Data.Text (Text)
 import GHC.Generics (Generic)
 
@@ -36,19 +38,40 @@ data GameState = MkGameState
   }
   deriving (Show, Eq, Generic, FromJSON, ToJSON)
 
+camelCaseOptions :: Aeson.Options
+camelCaseOptions = Aeson.defaultOptions{Aeson.constructorTagModifier = lowerFirst}
+ where
+  lowerFirst :: String -> String
+  lowerFirst [] = []
+  lowerFirst (x : xs) = Char.toLower x : xs
+
 data TopCardState
   = NoEffect
   | AceActive
   | SevenActive Int
   | QueenActive Suite
-  deriving (Show, Eq, Generic, FromJSON, ToJSON)
+  deriving (Show, Eq, Generic)
+
+instance ToJSON TopCardState where
+  toJSON = genericToJSON camelCaseOptions
+  toEncoding = genericToEncoding camelCaseOptions
+
+instance FromJSON TopCardState where
+  parseJSON = genericParseJSON camelCaseOptions
 
 data Suite
   = Hearts
   | Diamonds
   | Spades
   | Clubs
-  deriving (Show, Eq, Ord, Enum, Bounded, Generic, FromJSON, ToJSON)
+  deriving (Show, Eq, Ord, Enum, Bounded, Generic)
+
+instance ToJSON Suite where
+  toJSON = genericToJSON camelCaseOptions
+  toEncoding = genericToEncoding camelCaseOptions
+
+instance FromJSON Suite where
+  parseJSON = genericParseJSON camelCaseOptions
 
 data CardType
   = Ace
@@ -59,7 +82,14 @@ data CardType
   | Nine
   | Eight
   | Seven
-  deriving (Show, Eq, Ord, Enum, Bounded, Generic, FromJSON, ToJSON)
+  deriving (Show, Eq, Ord, Enum, Bounded, Generic)
+
+instance ToJSON CardType where
+  toJSON = genericToJSON camelCaseOptions
+  toEncoding = genericToEncoding camelCaseOptions
+
+instance FromJSON CardType where
+  parseJSON = genericParseJSON camelCaseOptions
 
 data Card = MkCard
   { cardType :: CardType
