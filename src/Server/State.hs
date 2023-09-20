@@ -50,6 +50,7 @@ data State = MkState
   { games :: Map GameId Game
   , users :: Map UserName User
   }
+  deriving (Show)
 
 emptyState :: State
 emptyState = MkState{games = mempty, users = mempty}
@@ -57,12 +58,14 @@ emptyState = MkState{games = mempty, users = mempty}
 data Game
   = WaitingForPlayers StartingGame
   | InProgress GameInProgress
+  deriving (Show)
 
 data StartingGame = MkStartingGame
   { id :: GameId
   , creator :: UserName
   , joinedUsers :: [UserName]
   }
+  deriving (Show)
 
 data GameInProgress = MkGameInProgress
   { id :: GameId
@@ -71,6 +74,7 @@ data GameInProgress = MkGameInProgress
   , disconnectedUsers :: [UserName]
   , status :: GameStatus
   }
+  deriving (Show)
 
 data GameStatus
   = Running
@@ -83,6 +87,9 @@ data User = MkUser
   , connection :: WS.Connection
   , inGame :: Maybe GameId
   }
+
+instance Show User where
+  show u = "MkUser {userName = " ++ show u.userName ++ ", inGame = " ++ show u.inGame ++ "}"
 
 -- State
 
