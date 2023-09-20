@@ -32,51 +32,51 @@ app stateVar conn = do
   userName <- acceptUserName stateVar conn
   let user = State.createUser userName conn
   STM.atomically $ STM.modifyTVar' stateVar (\s -> s{State.users = Map.insert userName user s.users})
-  handleMessage user stateVar
+  handleMessage userName conn stateVar
   putStrLn ("User with userName '" ++ show (State.userNameToText userName) ++ "' just ended their session.")
 
-handleMessage :: State.User -> TVar State.State -> IO ()
-handleMessage user stateVar = do
-  msg <- acceptValidMessage user.connection
+handleMessage :: State.UserName -> WS.Connection -> TVar State.State -> IO ()
+handleMessage userName conn stateVar = do
+  msg <- acceptValidMessage conn
   shouldContinue <- case msg of
     Msg.CreateGame -> do
-      newGame <- State.createNewGame user.userName -- Will not be added to the state if conditions are not met, but we need to create it outside the STM atomic block
+      newGame <- State.createNewGame userName -- Will not be added to the state if conditions are not met, but we need to create it outside the STM atomic block
       msgToSend <- STM.atomically $ do
         state <- STM.readTVar stateVar
-        case State.userGame user.userName state of
+        case State.userGame userName state of
           Just game -> pure . Msg.CreateGameResponse . Left . Msg.AlreadyInGame . State.gameIdToText . State.getGameId $ game
           Nothing -> do
             let gameId = State.getGameId newGame
-                newState = state{State.games = Map.insert gameId newGame state.games, State.users = Map.adjust (State.addUserToGame gameId) user.userName state.users}
+                newState = state{State.games = Map.insert gameId newGame state.games, State.users = Map.adjust (State.addUserToGame gameId) userName state.users}
 
             STM.writeTVar stateVar newState
             pure . Msg.CreateGameResponse . Right . State.gameIdToText $ gameId
 
-      sendMsg user.connection msgToSend
+      sendMsg conn msgToSend
       pure True
     Msg.StartGame -> do
       gameOrMsg <- STM.atomically $ do
         state <- STM.readTVar stateVar
-        case State.userGame user.userName state of
+        case State.userGame userName state of
           Nothing -> pure . Left . Msg.StartGameResponse . Left $ Msg.NotInAnyGame
           Just game
-            | State.gameCreator game /= user.userName -> pure . Left . Msg.StartGameResponse . Left $ Msg.NotCreator
+            | State.gameCreator game /= userName -> pure . Left . Msg.StartGameResponse . Left $ Msg.NotCreator
             | State.InProgress g <- game -> pure . Left . Msg.StartGameResponse . Left $ if g.status == State.Ended then Msg.AlreadyEnded else Msg.AlreadyRunning
             | otherwise -> pure $ Right game
 
       case gameOrMsg of
-        Left msgToSend -> sendMsg user.connection msgToSend >> pure True
+        Left msgToSend -> sendMsg conn msgToSend >> pure True
         Right game -> do
           startedGameOrError <- State.startGame game
           case startedGameOrError of
-            Left State.NotEnoughUsers -> sendMsg user.connection (Msg.StartGameResponse $ Left Msg.NotEnoughUsers) >> pure True
-            Left State.NotInStartingPhase -> sendMsg user.connection (Msg.StartGameResponse $ Left Msg.AlreadyRunning) >> pure True -- This should not happen
+            Left State.NotEnoughUsers -> sendMsg conn (Msg.StartGameResponse $ Left Msg.NotEnoughUsers) >> pure True
+            Left State.NotInStartingPhase -> sendMsg conn (Msg.StartGameResponse $ Left Msg.AlreadyRunning) >> pure True -- This should not happen
             Right (startedGame, gameState) -> do
               STM.atomically $ do
                 state <- STM.readTVar stateVar
                 let newState = state{State.games = Map.insert (State.getGameId startedGame) startedGame state.games}
                 STM.writeTVar stateVar newState
-              sendMsg user.connection (Msg.StartGameResponse $ Right $ RM.fromAppModel gameState)
+              sendMsg conn (Msg.StartGameResponse $ Right $ RM.fromAppModel gameState)
               pure True
     Msg.ConnectToGame rawGameId -> do
       msgToSend <- STM.atomically $ do
@@ -84,41 +84,34 @@ handleMessage user stateVar = do
         case State.isGameId rawGameId state of
           Nothing -> pure . Msg.ConnectResponse . Left . Msg.GameIdNotFound $ rawGameId
           Just (gameId, State.WaitingForPlayers game) ->
-            case State.addUser user.userName game of
+            case State.addUser userName game of
               Left _ -> pure (Msg.ConnectResponse $ Left $ Msg.TooManyPlayers Constants.maxUsersInGame)
               Right newGame -> do
-                let newUsers = Map.insert user.userName (State.addUserToGame gameId user) state.users
+                let newUsers = Map.adjust (State.addUserToGame gameId) userName state.users
                     newState = state{State.games = Map.insert gameId newGame state.games, State.users = newUsers}
                 STM.writeTVar stateVar newState
                 pure (Msg.ConnectResponse $ Right $ map State.userNameToText $ State.gameUsers newGame)
           _ -> pure $ Msg.ConnectResponse $ Left Msg.GameIsRunning
 
-      sendMsg user.connection msgToSend
+      sendMsg conn msgToSend
       pure True
     Msg.DisconnectFromGame -> do
       msgToSend <- STM.atomically $ do
         state <- STM.readTVar stateVar
-        case State.userGame user.userName state of
-          Nothing -> pure . Msg.DisconnectFromGameResponse . Left $ Msg.NoGameToDisconnectFrom
-          Just game ->
-            case State.removeFromGame user game of
-              Left State.NotInGame -> pure . Msg.DisconnectFromGameResponse . Left $ Msg.NoGameToDisconnectFrom
-              Left State.IsLast -> do
-                let newUser = user{State.inGame = Nothing}
-                    newState = state{State.games = Map.delete (State.getGameId game) state.games, State.users = Map.insert user.userName newUser state.users}
-                STM.writeTVar stateVar newState
-                pure . Msg.DisconnectFromGameResponse . Right $ Msg.Removed
-              Right (newGame, newUser) -> do
-                let newState = state{State.games = Map.insert (State.getGameId newGame) newGame state.games, State.users = Map.insert user.userName newUser state.users}
-                STM.writeTVar stateVar newState
-                pure . Msg.DisconnectFromGameResponse . Right $ Msg.Remains
+        case State.removeUserFromGame userName state of
+          Left State.NotInGame -> pure . Msg.DisconnectFromGameResponse . Left $ Msg.NoGameToDisconnectFrom
+          Left State.UserDoesNotExist -> error "Connected user is not in the state. This should never happen."
+          Left State.UserInNonExistentGame -> error "User is in a game that does not exist. This should never happen."
+          Right (newState, wasGameDeleted) -> do
+            STM.writeTVar stateVar newState
+            pure . Msg.DisconnectFromGameResponse . Right $ if wasGameDeleted then Msg.Removed else Msg.Remains
 
-      sendMsg user.connection msgToSend
+      sendMsg conn msgToSend
       pure True
     Msg.InGameMessage turn -> do
       msgToSend <- STM.atomically $ do
         state <- STM.readTVar stateVar
-        case (State.userGame user.userName state, Msg.toAppTurn turn) of
+        case (State.userGame userName state, Msg.toAppTurn turn) of
           (Nothing, _) -> pure $ Msg.TurnResult $ Left Msg.NotInGame
           (_, Left err) -> pure $ Msg.TurnResult $ Left err
           (Just game, Right appTurn) -> do
@@ -126,7 +119,7 @@ handleMessage user stateVar = do
                   State.WaitingForPlayers _ -> Left Msg.GameNotStarted
                   State.InProgress g
                     | g.status == State.Ended -> Left Msg.GameHasEnded
-                    | g.gameState.nextPlayer.name /= State.userNameToText user.userName -> Left $ Msg.NotYourTurn g.gameState.nextPlayer.name
+                    | g.gameState.nextPlayer.name /= State.userNameToText userName -> Left $ Msg.NotYourTurn g.gameState.nextPlayer.name
                     | otherwise -> Right g.gameState
             case flip MM.evaluateTurn appTurn <$> gameStateOrError of
               Left err -> pure $ Msg.TurnResult $ Left err
@@ -138,11 +131,11 @@ handleMessage user stateVar = do
                     STM.writeTVar stateVar state{State.games = Map.insert (State.getGameId game) newGame state.games}
                     pure (Msg.TurnResult $ Right $ RM.fromAppModel newGameState)
 
-      sendMsg user.connection msgToSend
+      sendMsg conn msgToSend
       pure True
-    Msg.LogInAs _ -> sendMsg user.connection (Msg.LogInResponse $ Left Msg.AlreadyLoggedIn) >> pure True
+    Msg.LogInAs _ -> sendMsg conn (Msg.LogInResponse $ Left Msg.AlreadyLoggedIn) >> pure True
 
-  when shouldContinue $ handleMessage user stateVar
+  when shouldContinue $ handleMessage userName conn stateVar
 
 acceptUserName :: TVar State.State -> WS.Connection -> IO State.UserName
 acceptUserName stateVar conn = do

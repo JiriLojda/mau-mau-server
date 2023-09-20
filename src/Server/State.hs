@@ -16,7 +16,7 @@ module Server.State (
   startGame,
   CannotStartGameReason (..),
   updateGameState,
-  removeFromGame,
+  removeUserFromGame,
   CannotRemoveReason (..),
   userNameToText,
   isGameId,
@@ -33,8 +33,10 @@ import MauMau.State qualified as MMS
 
 import Control.Monad (unless)
 import Data.Char (isAlphaNum)
+import Data.Either.Extra (maybeToEither)
 import Data.Map qualified as Map
 import Data.Map.Strict (Map)
+import Data.Maybe qualified as May
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.UUID (UUID)
@@ -111,7 +113,7 @@ addUser userName game
 
 gameUsers :: Game -> [UserName]
 gameUsers (WaitingForPlayers game) = game.creator : game.joinedUsers
-gameUsers (InProgress game) = map MkUserName $ rawGameUsers game.gameState
+gameUsers (InProgress game) = map MkUserName $ MMS.players game.gameState
 
 gameCreator :: Game -> UserName
 gameCreator (WaitingForPlayers g) = g.creator
@@ -133,21 +135,31 @@ createNewGame creator = do
 
 data CannotRemoveReason
   = NotInGame
-  | IsLast
+  | UserDoesNotExist
+  | UserInNonExistentGame
 
-removeFromGame :: User -> Game -> Either CannotRemoveReason (Game, User)
-removeFromGame user game = do
-  unless (user.inGame == Just (getGameId game)) (Left NotInGame)
-  let newUser = user{inGame = Nothing}
+removeUserFromGame :: UserName -> State -> Either CannotRemoveReason (State, Bool)
+removeUserFromGame userName state = do
+  user <- maybeToEither UserDoesNotExist $ Map.lookup userName state.users
+  gameId <- maybeToEither NotInGame user.inGame
+  game <- maybeToEither UserInNonExistentGame $ Map.lookup gameId state.games
 
   newGame <- case game of
-    WaitingForPlayers (MkStartingGame{joinedUsers = []}) -> Left IsLast
+    WaitingForPlayers (MkStartingGame{joinedUsers = []}) -> pure Nothing
     WaitingForPlayers g@MkStartingGame{joinedUsers = nextUser : restUsers}
-      | g.creator == user.userName -> Right $ WaitingForPlayers g{creator = nextUser, joinedUsers = restUsers}
-      | otherwise -> Right $ WaitingForPlayers g{joinedUsers = filter (/= user.userName) g.joinedUsers}
-    InProgress g -> Right $ InProgress g{disconnectedUsers = user.userName : g.disconnectedUsers, status = if g.status == Ended then Ended else WaitingForDisconnected}
+      | g.creator == user.userName -> pure $ Just $ WaitingForPlayers g{creator = nextUser, joinedUsers = restUsers}
+      | otherwise -> pure $ Just $ WaitingForPlayers g{joinedUsers = filter (/= user.userName) g.joinedUsers}
+    InProgress g
+      | MMS.players g.gameState == [userNameToText userName] -> pure Nothing
+      | otherwise -> pure $ Just $ InProgress g{disconnectedUsers = user.userName : g.disconnectedUsers, status = if g.status == Ended then Ended else WaitingForDisconnected}
 
-  pure (newGame, newUser)
+  let newUser = user{inGame = Nothing}
+      stateWithNewUser = state{users = Map.insert userName newUser state.users}
+      newState = case newGame of
+        Nothing -> stateWithNewUser{games = Map.delete gameId state.games}
+        Just g -> stateWithNewUser{games = Map.insert gameId g state.games}
+
+  pure (newState, May.isNothing newGame)
 
 data CannotStartGameReason
   = NotEnoughUsers
@@ -203,11 +215,8 @@ isInGame userName@(MkUserName rawUserName) g = case g of
   WaitingForPlayers game -> game.creator == userName || userName `elem` game.joinedUsers
   InProgress game -> rawUserName `isInGameState` game.gameState
 
-rawGameUsers :: MMS.GameState -> [Text]
-rawGameUsers gameState = gameState.nextPlayer.name : map (.name) gameState.restPlayers
-
 isInGameState :: Text -> MMS.GameState -> Bool
-isInGameState userName = elem userName . rawGameUsers
+isInGameState userName = elem userName . MMS.players
 
 userNameToText :: UserName -> Text
 userNameToText (MkUserName x) = x

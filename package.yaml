@@ -51,6 +51,7 @@ library:
   - aeson
   - uuid
   - random
+  - extra
 
 executables:
   mau-mau-BE-exe:

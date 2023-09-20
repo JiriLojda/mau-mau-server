@@ -7,6 +7,7 @@ module MauMau.State (
   GameState (..),
   cardsInGame,
   generateNew,
+  players,
 ) where
 
 import MauMau.Cards (Card, CardType, Suite)
@@ -68,3 +69,6 @@ makePlayer name cards = (MkPlayer{name, hand}, rest)
 
 mapFirst :: (a -> b) -> (a, c) -> (b, c)
 mapFirst mapper (x, y) = (mapper x, y)
+
+players :: GameState -> [Text]
+players state = state.nextPlayer.name : map (.name) state.restPlayers
