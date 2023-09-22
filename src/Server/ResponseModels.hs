@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Server.ResponseModels (
   -- GameState
@@ -20,8 +21,9 @@ import MauMau qualified as MM
 import MauMau.State qualified as MMS
 import MauMau.StateValidation qualified as MMV
 
-import Data.Aeson (FromJSON, ToJSON (toJSON), genericParseJSON, genericToEncoding, genericToJSON)
+import Data.Aeson (FromJSON, ToJSON (toJSON), genericParseJSON, genericToEncoding, genericToJSON, (.=))
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Types (object)
 import Data.Char qualified as Char
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -53,8 +55,10 @@ data TopCardState
   deriving (Show, Eq, Generic)
 
 instance ToJSON TopCardState where
-  toJSON = genericToJSON camelCaseOptions
-  toEncoding = genericToEncoding camelCaseOptions
+  toJSON NoEffect = object ["state" .= ("noEffect" :: Text)]
+  toJSON AceActive = object ["state" .= ("aceActive" :: Text)]
+  toJSON (SevenActive num) = object ["state" .= ("sevenActive" :: Text), "cardsToDraw" .= num]
+  toJSON (QueenActive suite) = object ["state" .= ("queenPresent" :: Text), "chosenSuite" .= suite]
 
 instance FromJSON TopCardState where
   parseJSON = genericParseJSON camelCaseOptions
@@ -178,14 +182,14 @@ data InvalidTurnReason
   | CanOnlyPlayCardsFromHand
 
 instance ToJSON InvalidTurnReason where
-  toJSON OnlyAceOrSkip = toJSON "You can only play an ace or skip the turn."
-  toJSON OnlySevenOrDraw = toJSON "You can only play a seven or draw cards."
+  toJSON OnlyAceOrSkip = "You can only play an ace or skip the turn."
+  toJSON OnlySevenOrDraw = "You can only play a seven or draw cards."
   toJSON (OnlyQueenOr t s) = toJSON ("You can only play a Queen or a card of type " ++ show (toJSON t) ++ " or a card with suite " ++ show (toJSON s) ++ ".")
-  toJSON GameHadEnded = toJSON "The game has already ended."
-  toJSON SkipIsNotPossible = toJSON "It is currently not possible to skip."
+  toJSON GameHadEnded = "The game has already ended."
+  toJSON SkipIsNotPossible = "It is currently not possible to skip."
   toJSON (InvalidInputState reason) = toJSON ("The game state is invalid, because: " ++ show (toJSON reason))
-  toJSON InvalidInput = toJSON "The provided input is not valid."
-  toJSON CanOnlyPlayCardsFromHand = toJSON "You can only play cards from your hand."
+  toJSON InvalidInput = "The provided input is not valid."
+  toJSON CanOnlyPlayCardsFromHand = "You can only play cards from your hand."
 
 data InvalidStateReason
   = NonMatchingTopCardState
@@ -193,9 +197,9 @@ data InvalidStateReason
   | IncorrectNumRequiredBySeven
 
 instance ToJSON InvalidStateReason where
-  toJSON NonMatchingTopCardState = toJSON "The top card state does not match the top card."
-  toJSON IncorrectAmountOfCardsInGame = toJSON "The amount of cards in the game is incorrect."
-  toJSON IncorrectNumRequiredBySeven = toJSON "The amount of cards required by the top card state for a card seven on the top is not correct."
+  toJSON NonMatchingTopCardState = "The top card state does not match the top card."
+  toJSON IncorrectAmountOfCardsInGame = "The amount of cards in the game is incorrect."
+  toJSON IncorrectNumRequiredBySeven = "The amount of cards required by the top card state for a card seven on the top is not correct."
 
 -- Error reason conversion from App model
 
