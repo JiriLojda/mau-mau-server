@@ -11,6 +11,9 @@ module Server.Message (
   DisconnectFromGameFailReason (..),
   GameStatusAfterDisconnect (..),
   StartGameErrorReason (..),
+  CreatedGameResponseParams (..),
+  UserConnectedToGameResponse (..),
+  DisconnectFromGameResponse (..),
   toAppTurn,
 ) where
 
@@ -96,9 +99,9 @@ toAppTurn (PlayCard card Nothing) = Right $ MM.PlayCard (RM.cardToAppModel card)
 data ResponseMessage
   = GameEnded RM.GameState
   | TurnResult (Either TurnFailReason RM.GameState)
-  | ConnectResponse (Either ConnectFailReason [Text])
-  | DisconnectFromGameResponse (Either DisconnectFromGameFailReason GameStatusAfterDisconnect)
-  | CreateGameResponse (Either CreateGameError Text)
+  | ConnectResponse (Either ConnectFailReason UserConnectedToGameResponse)
+  | DisconnectFromGameResponse (Either DisconnectFromGameFailReason DisconnectFromGameResponse)
+  | CreateGameResponse (Either CreateGameError CreatedGameResponseParams)
   | StartGameResponse (Either StartGameErrorReason RM.GameState)
   | LogInResponse (Either LogInFailReason [Text])
   | SendUserNameFirst
@@ -109,11 +112,11 @@ instance ToJSON ResponseMessage where
   toJSON (TurnResult (Left err)) = object ["type" .= ("turn" :: Text), "error" .= toJSON err]
   toJSON (TurnResult (Right state)) = object ["type" .= ("turn" :: Text), "success" .= toJSON True, "state" .= toJSON state]
   toJSON (ConnectResponse (Left err)) = object ["type" .= ("connectToGame" :: Text), "error" .= toJSON err]
-  toJSON (ConnectResponse (Right users)) = object ["type" .= ("connectToGame" :: Text), "success" .= toJSON True, "users" .= toJSON users]
+  toJSON (ConnectResponse (Right params)) = object ["type" .= ("connectToGame" :: Text), "success" .= toJSON True, "gameId" .= params.gameId, "userName" .= params.userName, "usersInGame" .= params.usersInGame]
   toJSON (DisconnectFromGameResponse (Left err)) = object ["type" .= ("disconnectFromGame" :: Text), "error" .= toJSON err]
-  toJSON (DisconnectFromGameResponse (Right gameStatus)) = object ["type" .= ("disconnectFromGame" :: Text), "success" .= toJSON True, "gameStatusAfterDisconnect" .= toJSON gameStatus]
+  toJSON (DisconnectFromGameResponse (Right params)) = object ["type" .= ("disconnectFromGame" :: Text), "success" .= toJSON True, "gameStatusAfterDisconnect" .= toJSON params.gameStatusAfterDisconnect, "userName" .= params.userName, "gameId" .= params.gameId]
   toJSON (CreateGameResponse (Left err)) = object ["type" .= ("gameCreation" :: Text), "error" .= toJSON err]
-  toJSON (CreateGameResponse (Right gameId)) = object ["type" .= ("gameCreation" :: Text), "success" .= toJSON True, "gameId" .= toJSON gameId]
+  toJSON (CreateGameResponse (Right params)) = object ["type" .= ("gameCreation" :: Text), "success" .= toJSON True, "gameId" .= toJSON params.gameId, "creator" .= params.creatorName]
   toJSON (StartGameResponse (Left err)) = object ["type" .= ("startGame" :: Text), "error" .= toJSON err]
   toJSON (StartGameResponse (Right state)) = object ["type" .= ("startGame" :: Text), "success" .= True, "state" .= toJSON state]
   toJSON (LogInResponse (Left err)) = object ["type" .= ("logIn" :: Text), "error" .= toJSON err]
@@ -121,12 +124,23 @@ instance ToJSON ResponseMessage where
   toJSON SendUserNameFirst = object ["type" .= ("handshake" :: Text), "error" .= ("Provide your userName before other interaction." :: Text)]
   toJSON (InvalidMessage err) = object ["type" .= ("error" :: Text), "error" .= ("You sent and invalid message. Error: " ++ show err)]
 
+data CreatedGameResponseParams = MkCreatedGameResponseParams
+  { gameId :: Text
+  , creatorName :: Text
+  }
+
 data StartGameErrorReason
   = NotCreator
   | AlreadyRunning
   | AlreadyEnded
   | NotInAnyGame
   | NotEnoughUsers
+
+data UserConnectedToGameResponse = MkUserConnectedToGameResponse
+  { userName :: Text
+  , gameId :: Text
+  , usersInGame :: [Text]
+  }
 
 instance ToJSON StartGameErrorReason where
   toJSON NotCreator = "You are not the creator of this game."
@@ -164,6 +178,12 @@ data DisconnectFromGameFailReason
 
 instance ToJSON DisconnectFromGameFailReason where
   toJSON NoGameToDisconnectFrom = "You are not in any game."
+
+data DisconnectFromGameResponse = MkDisconnectFromGameResponse
+  { userName :: Text
+  , gameId :: Text
+  , gameStatusAfterDisconnect :: GameStatusAfterDisconnect
+  }
 
 data GameStatusAfterDisconnect
   = Remains

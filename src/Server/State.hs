@@ -14,6 +14,7 @@ module Server.State (
   getGameId,
   createNewGame,
   startGame,
+  hasEnded,
   CannotStartGameReason (..),
   updateGameState,
   removeUserFromGame,
@@ -138,7 +139,7 @@ data CannotRemoveReason
   | UserDoesNotExist
   | UserInNonExistentGame
 
-removeUserFromGame :: UserName -> State -> Either CannotRemoveReason (State, Bool)
+removeUserFromGame :: UserName -> State -> Either CannotRemoveReason (State, Bool, GameId)
 removeUserFromGame userName state = do
   user <- maybeToEither UserDoesNotExist $ Map.lookup userName state.users
   gameId <- maybeToEither NotInGame user.inGame
@@ -159,7 +160,7 @@ removeUserFromGame userName state = do
         Nothing -> stateWithNewUser{games = Map.delete gameId state.games}
         Just g -> stateWithNewUser{games = Map.insert gameId g state.games}
 
-  pure (newState, May.isNothing newGame)
+  pure (newState, May.isNothing newGame, gameId)
 
 data CannotStartGameReason
   = NotEnoughUsers
@@ -172,6 +173,10 @@ startGame (WaitingForPlayers game@MkStartingGame{joinedUsers = nextUser : restUs
   gameState <- MMS.generateNew (userNameToText game.creator, userNameToText nextUser) $ map userNameToText restUsers
 
   pure $ Right (InProgress MkGameInProgress{id = game.id, creator = game.creator, gameState, disconnectedUsers = [], status = Running}, gameState)
+
+hasEnded :: Game -> Bool
+hasEnded (WaitingForPlayers _) = False
+hasEnded (InProgress g) = null g.gameState.restPlayers
 
 -- GameId
 
