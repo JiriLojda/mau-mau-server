@@ -35,10 +35,10 @@ data GameState = MkGameState
   , restPlayers :: [Player]
   , topCard :: Card
   , discardPile :: [Card]
-  , drawPile :: [Card]
+  , drawPile :: [SomeCard]
   , topCardState :: TopCardState
   }
-  deriving (Show, Eq, Generic, FromJSON, ToJSON)
+  deriving (Show, Eq, Generic, ToJSON)
 
 camelCaseOptions :: Aeson.Options
 camelCaseOptions = Aeson.defaultOptions{Aeson.constructorTagModifier = lowerFirst}
@@ -101,27 +101,43 @@ data Card = MkCard
   }
   deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
 
-data Player = MkPlayer
-  { hand :: [Card]
+data SomeCard = MkSomeCard deriving (Show, Eq)
+
+instance ToJSON SomeCard where
+  toJSON MkSomeCard = object ["cardType" .= ("unknownType" :: Text), "suite" .= ("unknownSuite" :: Text)]
+
+data Player
+  = Receiver (PlayerRec Card)
+  | OtherPlayer (PlayerRec SomeCard)
+  deriving (Show, Eq)
+
+instance ToJSON Player where
+  toJSON (Receiver rec) = toJSON rec
+  toJSON (OtherPlayer rec) = toJSON rec
+
+data PlayerRec card = MkPlayerRec
+  { hand :: [card]
   , name :: Text
   }
   deriving (Show, Eq, Generic, FromJSON, ToJSON)
 
 -- GameState conversion from the App model
 
-fromAppModel :: MMS.GameState -> GameState
-fromAppModel appM =
+fromAppModel :: Text -> MMS.GameState -> GameState
+fromAppModel receiverName appM =
   MkGameState
-    { nextPlayer = mapPlayer appM.nextPlayer
-    , restPlayers = map mapPlayer appM.restPlayers
+    { nextPlayer = mapPlayer receiverName appM.nextPlayer
+    , restPlayers = map (mapPlayer receiverName) appM.restPlayers
     , topCard = mapCard appM.topCard
     , discardPile = map mapCard appM.discardPile
-    , drawPile = map mapCard appM.drawPile
+    , drawPile = map (const MkSomeCard) appM.drawPile
     , topCardState = mapTopCardState appM.topCardState
     }
 
-mapPlayer :: MMS.Player -> Player
-mapPlayer appP = MkPlayer{hand = map mapCard appP.hand, name = appP.name}
+mapPlayer :: Text -> MMS.Player -> Player
+mapPlayer receiverName appP
+  | appP.name == receiverName = Receiver MkPlayerRec{hand = map mapCard appP.hand, name = appP.name}
+  | otherwise = OtherPlayer MkPlayerRec{hand = map (const MkSomeCard) appP.hand, name = appP.name}
 
 mapCard :: MMS.Card -> Card
 mapCard appC = MkCard{cardType = mapCardType appC.cardType, suite = mapSuite appC.suite}
