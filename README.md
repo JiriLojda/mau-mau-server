@@ -5,7 +5,7 @@ This is a web sockets server for managing multi-player matches of the [Czech ver
 It supports:
 * multiple parallel games
 * log-in with user name only
-* games or in-memory only so after restarting the server all games are gone
+* games are in-memory only so after restarting the server all games are gone
 
 It is intended as a BE for the [mau-mau React app](https://github.com/juliamariachkina/mau-mau). Its main purpose is for me to get more experience with Haskell and try new concepts (e.g. creating web socket servers).
 
