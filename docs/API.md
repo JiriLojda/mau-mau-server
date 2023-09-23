@@ -40,6 +40,16 @@ that is either [expected from a client](#client-sent-messages) or [sent to the c
          - [Skip turn](#skip-turn)
          - [Draw cards](#draw-cards)
          - [Play a card](#play-a-card)
+   * [Game state format](#game-state-format)
+      + [GameState](#gamestate)
+      + [Player](#player)
+      + [Card](#card)
+         - [Example](#example)
+         - [Unknown card](#unknown-card)
+      + [TopCardState](#topcardstate)
+         - [Example](#example-1)
+      + [CardType](#cardtype)
+      + [Suite](#suite)
 
 # User flow overview
 
@@ -62,7 +72,7 @@ In the end there are two properties that uniquely identify each message, `type` 
 
 Success message
 * In response to the [login message](#log-in-message)
-* Fields:
+* Properties:
   * `availableGameIds` - list of all created games currently on the server
 * Audience: sender of the login message
 ```json
@@ -128,7 +138,7 @@ Error message
 
 Success message
 * In response to the [connect to an existing game message](#connecting-to-an-existing-game)
-* Fields:
+* Properties:
   * `usersInGame` - usernames of all users connected to the game (including the sender)
 * Audience: players connected to the game (including the sender)
 ```json
@@ -185,6 +195,8 @@ Error message
 Success message
 * In response to the [start a game message](#starting-a-game)
 * Audience: players of the game
+* Properties:
+  * `state` - [`GameState`](#gamestate)
 ```json5
 { "type": "startGame"
 , "success": true
@@ -210,6 +222,8 @@ Error message
 Success message
 * In response to the [play a turn message](#playing-a-turn)
 * Audience: players of the game
+* Properties:
+  * `state` - [`GameState`](#gamestate)
 ```json5
 { "type": "turn"
 , "success": true
@@ -233,6 +247,8 @@ Error message
 Success message
 * In response to the [play a turn message](#playing-a-turn)
 * Audience: players of the game
+* Properties:
+  * `state` - [`GameState`](#gamestate)
 ```json5
 { "type": "gameEnded"
 , "state": GameState
@@ -334,11 +350,108 @@ Alternatively, you can also play this when there is an active seven on top of th
 
 Play this when you want to play a card.
 
-Fields:
-  * `chosenSuite` - This field is required only when you play a queen.
+Properties:
+  * `chosenSuite` - [`Suite`](#suite) this property is required only when you play a queen.
+  * `card` - [`Card`](#card)
 ```json5
 { "type": "playCard"
 , "card": Card
 , "chosenSuite": Suite
 }
 ```
+
+## Game state format
+
+### GameState
+
+An object representing a state of the game.
+You never send this to the server, you only receive it from server in certain messages.
+
+Properties:
+* `nextPlayer` - The [`Player`](#player) that should play next
+* `restPlayers` - An array with the rest of the [`Player`](#player)s in order (i.e. the first in the array will play right after the `nextPlayer` and the last in the array will play after all the others in the array have already played their turn)
+* `topCard` - The [`Card`](#card) that is on top of the discard pile. This card decides what card can be played next (together with the `topCardState` property)
+* `discardPile` - An array with the rest of the [`Card`](#card)s played before the `topCard` in the order they were played (i.e. the first in the array is the one played right before the `topCard`)
+* `drawPile` - An array of [`Card`](#card)s to draw from. These will always be [unknown cards](#unknown-card).
+* `topCardState` - The [`TopCardState`](#topcardstate)
+
+### Player
+
+An object representing a user in the game.
+
+Properties:
+* `name` - The player's username
+* `hand` - An array of [`Card`](#card)s that the player has in hand
+
+### Card
+
+An object representing a card.
+
+Properties:
+* `cardType` - [`CardType`](#cardtype) (or `unknownType` [see explanation](#unknown-card)) represents the card's type
+* `suite` - [`Suite`](#suite) (or `unknownSuite` [see explanation](#unknown-card)) represents the card's suite
+
+#### Example
+
+```json
+{ "cardType": "king"
+, "suite": "clubs"
+}
+```
+
+#### Unknown card
+
+In some cases (e.g. in the draw pile or a hand of another player) there are unknown cards.
+It means that the player that received a message with such a card can't see the card.
+They only know that the card there exists (e.g. that there is 10 cards in the draw pile or that the player X has 3 cards in his hand).
+
+```json
+{ "cardType": "unknownType"
+, "suite": "unknownSuite"
+}
+```
+
+### TopCardState
+
+An object that defines the state of the top card on the discard pile.
+
+Properties differ based on the `state` property:
+* `state`: `noEffect` => The top card has no effect (e.g. a seven doesn't force the next player to draw cards, because someone else has already drawn cards).
+  * No other properties are present
+  * The top card can be any card
+* `state`: `aceActive` => The ace on top is active and the next player must either skip or play another ace.
+  * No other properties are present
+  * The top card must be an ace
+* `state`: `sevenActive` => The seven on top is active and the next player must either draw cards or play another seven.
+  * `cardsToDraw` - the number of cards the next player will draw unless they play another seven
+  * The top card must be a seven
+* `state`: `queenPresen` => There is a queen on top and this object specifies what suite was chosen.
+  * `chosenSuite` - The suite chosen by the player that played the queen. The next card must have this suite or be another queen.
+  * The top card must be a queen
+
+#### Example
+```json
+{ "state": "sevenActive"
+, "cardsToDraw": 4
+}
+```
+
+### CardType
+
+A string indicating a card type. Possible values:
+* `ace`
+* `king`
+* `queen`
+* `jack`
+* `ten`
+* `nine`
+* `eight`
+* `seven`
+
+### Suite
+
+A string indicating a card suite. Possible values:
+* `hearts`
+* `diamonds`
+* `spades`
+* `clubs`
