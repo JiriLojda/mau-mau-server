@@ -185,10 +185,10 @@ Error message
 Success message
 * In response to the [start a game message](#starting-a-game)
 * Audience: players of the game
-```json
+```json5
 { "type": "startGame"
 , "success": true
-, "state": <GameState>
+, "state": GameState
 }
 ```
 
@@ -210,10 +210,10 @@ Error message
 Success message
 * In response to the [play a turn message](#playing-a-turn)
 * Audience: players of the game
-```json
+```json5
 { "type": "turn"
 , "success": true
-, "state": <GameState>
+, "state": GameState
 }
 ```
 
@@ -233,9 +233,9 @@ Error message
 Success message
 * In response to the [play a turn message](#playing-a-turn)
 * Audience: players of the game
-```json
+```json5
 { "type": "gameEnded"
-, "state": <GameState>
+, "state": GameState
 }
 ```
 
@@ -336,9 +336,9 @@ Play this when you want to play a card.
 
 Fields:
   * `chosenSuite` - This field is required only when you play a queen.
-```json
+```json5
 { "type": "playCard"
-, "card": <Card>
-, "chosenSuite": <Suite>
+, "card": Card
+, "chosenSuite": Suite
 }
 ```
