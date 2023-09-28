@@ -1,3 +1,6 @@
+![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/JiriLojda/mau-mau-server/buildAndTest.yml)
+![GitHub Repo stars](https://img.shields.io/github/stars/JiriLojda/mau-mau-server?style=social)
+
 # Mau-Mau game web sockets server
 
 This is a web sockets server for managing multi-player matches of the [Czech version](https://en.wikipedia.org/wiki/Mau-Mau_(card_game)#Czech_Republic) of the [Mau-Mau game](https://en.wikipedia.org/wiki/Mau-Mau_(card_game)).
