@@ -1,4 +1,8 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Server.Message (
   GameRequestMessage (..),
@@ -22,7 +26,11 @@ import Server.ResponseModels qualified as RM
 import Data.Aeson (FromJSON (..), Key, Object, ToJSON (toJSON), Value, object, withObject, withText, (.:), (.=))
 import Data.Aeson.KeyMap qualified as AesonMap
 import Data.Aeson.Types (Parser)
+import Data.Aeson.Types qualified as Aeson
+import Data.Proxy (Proxy (Proxy))
 import Data.Text (Text)
+import Data.Text qualified as Text
+import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
 import MauMau qualified as MM
 
 -- Request models
@@ -108,21 +116,21 @@ data ResponseMessage
   | InvalidMessage Text
 
 instance ToJSON ResponseMessage where
-  toJSON (GameEnded s) = object ["type" .= ("gameEnded" :: Text), "state" .= toJSON s]
-  toJSON (TurnResult (Left err)) = object ["type" .= ("turn" :: Text), "error" .= toJSON err]
-  toJSON (TurnResult (Right state)) = object ["type" .= ("turn" :: Text), "success" .= toJSON True, "state" .= toJSON state]
-  toJSON (ConnectResponse (Left err)) = object ["type" .= ("connectToGame" :: Text), "error" .= toJSON err]
-  toJSON (ConnectResponse (Right params)) = object ["type" .= ("connectToGame" :: Text), "success" .= toJSON True, "gameId" .= params.gameId, "userName" .= params.userName, "usersInGame" .= params.usersInGame]
-  toJSON (DisconnectFromGameResponse (Left err)) = object ["type" .= ("disconnectFromGame" :: Text), "error" .= toJSON err]
-  toJSON (DisconnectFromGameResponse (Right params)) = object ["type" .= ("disconnectFromGame" :: Text), "success" .= toJSON True, "gameStatusAfterDisconnect" .= toJSON params.gameStatusAfterDisconnect, "userName" .= params.userName, "gameId" .= params.gameId]
-  toJSON (CreateGameResponse (Left err)) = object ["type" .= ("gameCreation" :: Text), "error" .= toJSON err]
-  toJSON (CreateGameResponse (Right params)) = object ["type" .= ("gameCreation" :: Text), "success" .= toJSON True, "gameId" .= toJSON params.gameId, "creator" .= params.creatorName]
-  toJSON (StartGameResponse (Left err)) = object ["type" .= ("startGame" :: Text), "error" .= toJSON err]
-  toJSON (StartGameResponse (Right state)) = object ["type" .= ("startGame" :: Text), "success" .= True, "state" .= toJSON state]
-  toJSON (LogInResponse (Left err)) = object ["type" .= ("logIn" :: Text), "error" .= toJSON err]
-  toJSON (LogInResponse (Right gameIds)) = object ["type" .= ("logIn" :: Text), "success" .= toJSON True, "availableGameIds" .= toJSON gameIds]
-  toJSON SendUserNameFirst = object ["type" .= ("handshake" :: Text), "error" .= ("Provide your userName before other interaction." :: Text)]
-  toJSON (InvalidMessage err) = object ["type" .= ("error" :: Text), "error" .= ("You sent and invalid message. Error: " ++ show err)]
+  toJSON (GameEnded s) = successMsg "gameEnded" ["state" .= s]
+  toJSON (TurnResult (Left err)) = errorMsg @"GTE" "turn" err
+  toJSON (TurnResult (Right state)) = successMsg "turn" ["state" .= state]
+  toJSON (ConnectResponse (Left err)) = errorMsg @"CTG" "connectToGame" err
+  toJSON (ConnectResponse (Right params)) = successMsg "connectToGame" ["gameId" .= params.gameId, "userName" .= params.userName, "usersInGame" .= params.usersInGame]
+  toJSON (DisconnectFromGameResponse (Left err)) = errorMsg @"DFG" "disconnectFromGame" err
+  toJSON (DisconnectFromGameResponse (Right params)) = successMsg "disconnectFromGame" ["gameStatusAfterDisconnect" .= toJSON params.gameStatusAfterDisconnect, "userName" .= params.userName, "gameId" .= params.gameId]
+  toJSON (CreateGameResponse (Left err)) = errorMsg @"CNG" "gameCreation" err
+  toJSON (CreateGameResponse (Right params)) = successMsg "gameCreation" ["gameId" .= toJSON params.gameId, "creator" .= params.creatorName]
+  toJSON (StartGameResponse (Left err)) = errorMsg @"SCG" "startGame" err
+  toJSON (StartGameResponse (Right state)) = successMsg "startGame" ["state" .= toJSON state]
+  toJSON (LogInResponse (Left err)) = errorMsg @"LIE" "logIn" err
+  toJSON (LogInResponse (Right gameIds)) = successMsg "logIn" ["availableGameIds" .= toJSON gameIds]
+  toJSON SendUserNameFirst = errorMsg @"MUN" "handshake" NoUserNameError
+  toJSON (InvalidMessage err) = errorMsg @"GPE" "error" (ParseError err)
 
 data CreatedGameResponseParams = MkCreatedGameResponseParams
   { gameId :: Text
@@ -142,18 +150,18 @@ data UserConnectedToGameResponse = MkUserConnectedToGameResponse
   , usersInGame :: [Text]
   }
 
-instance ToJSON StartGameErrorReason where
-  toJSON NotCreator = "You are not the creator of this game."
-  toJSON AlreadyRunning = "The game is already running."
-  toJSON AlreadyEnded = "The game has alredy ended."
-  toJSON NotInAnyGame = "You are not in any game."
-  toJSON NotEnoughUsers = "There is not enough users to start the game."
+instance MauMauServerError "SCG" StartGameErrorReason where
+  toErrorWithCode NotCreator = const (100, "You are not the creator of this game.")
+  toErrorWithCode AlreadyRunning = const (200, "The game is already running.")
+  toErrorWithCode AlreadyEnded = const (210, "The game has alredy ended.")
+  toErrorWithCode NotInAnyGame = const (300, "You are not in any game.")
+  toErrorWithCode NotEnoughUsers = const (400, "There is not enough users to start the game.")
 
 newtype CreateGameError
   = AlreadyInGame Text
 
-instance ToJSON CreateGameError where
-  toJSON (AlreadyInGame gameId) = toJSON ("Cannot create a game when you already are in a game with gameId: '" ++ show gameId ++ "'.")
+instance MauMauServerError "CNG" CreateGameError where
+  toErrorWithCode (AlreadyInGame gameId) = const (100, Text.pack $ "Cannot create a game when you already are in a game with gameId: '" ++ show gameId ++ "'.")
 
 data TurnFailReason
   = InvalidTurn RM.InvalidTurnReason
@@ -164,20 +172,30 @@ data TurnFailReason
   | QueenWithoutSuite
   | SuiteWithoutQueen
 
-instance ToJSON TurnFailReason where
-  toJSON (InvalidTurn reason) = toJSON reason
-  toJSON (NotYourTurn currentUserName) = toJSON ("It is not your turn now. Currently waiting for turn of '" ++ show currentUserName ++ "'.")
-  toJSON NotInGame = "You are not in any game. Connect to a game or create one first."
-  toJSON GameNotStarted = "The game has not started yet. Wait for the game creator to start the game."
-  toJSON GameHasEnded = "The game has already ended. Join another game first."
-  toJSON QueenWithoutSuite = "You must choose a suite when you play the Queen card."
-  toJSON SuiteWithoutQueen = "You can only choose a suite when playing the Queen card."
+instance MauMauServerError "GTE" TurnFailReason where
+  toErrorWithCode (InvalidTurn reason) = const $ toErrorWithCode reason (Proxy @"CIT")
+  toErrorWithCode (NotYourTurn currentUserName) = const (110, mconcat ["It is not your turn now. Currently waiting for turn of '", currentUserName, "'."])
+  toErrorWithCode NotInGame = const (200, "You are not in any game. Connect to a game or create one first.")
+  toErrorWithCode GameNotStarted = const (210, "The game has not started yet. Wait for the game creator to start the game.")
+  toErrorWithCode GameHasEnded = const (220, "The game has already ended. Join another game first.")
+  toErrorWithCode QueenWithoutSuite = const (300, "You must choose a suite when you play the Queen card.")
+  toErrorWithCode SuiteWithoutQueen = const (310, "You can only choose a suite when playing the Queen card.")
+
+instance MauMauServerError "CIT" RM.InvalidTurnReason where
+  toErrorWithCode err@RM.OnlyAceOrSkip = const (100, Text.pack $ show err)
+  toErrorWithCode err@RM.OnlySevenOrDraw = const (110, Text.pack $ show err)
+  toErrorWithCode err@(RM.OnlyQueenOr _ _) = const (120, Text.pack $ show err)
+  toErrorWithCode err@RM.SkipIsNotPossible = const (130, Text.pack $ show err)
+  toErrorWithCode err@RM.GameHadEnded = const (200, Text.pack $ show err)
+  toErrorWithCode err@(RM.InvalidInputState _) = const (300, Text.pack $ show err)
+  toErrorWithCode err@RM.InvalidInput = const (310, Text.pack $ show err)
+  toErrorWithCode err@RM.CanOnlyPlayCardsFromHand = const (400, Text.pack $ show err)
 
 data DisconnectFromGameFailReason
   = NoGameToDisconnectFrom
 
-instance ToJSON DisconnectFromGameFailReason where
-  toJSON NoGameToDisconnectFrom = "You are not in any game."
+instance MauMauServerError "DFG" DisconnectFromGameFailReason where
+  toErrorWithCode NoGameToDisconnectFrom = const (100, "You are not in any game.")
 
 data DisconnectFromGameResponse = MkDisconnectFromGameResponse
   { userName :: Text
@@ -198,20 +216,39 @@ data ConnectFailReason
   | TooManyPlayers Int
   | GameIsRunning
 
-instance ToJSON ConnectFailReason where
-  toJSON (GameIdNotFound gameId) = toJSON ("The game id '" ++ show gameId ++ "' doesn't exist.")
-  toJSON (TooManyPlayers amount) = toJSON ("The game already has the maximum of " ++ show amount ++ " players.")
-  toJSON GameIsRunning = "The game is already running and doesn't accept new players"
+instance MauMauServerError "CTG" ConnectFailReason where
+  toErrorWithCode (GameIdNotFound gameId) = const (100, Text.pack $ "The game id '" ++ show gameId ++ "' doesn't exist.")
+  toErrorWithCode (TooManyPlayers amount) = const (200, Text.pack $ "The game already has the maximum of " ++ show amount ++ " players.")
+  toErrorWithCode GameIsRunning = const (300, "The game is already running and doesn't accept new players")
 
 data LogInFailReason
   = UserNameTaken
   | InvalidUserName
   | AlreadyLoggedIn
 
-instance ToJSON LogInFailReason where
-  toJSON UserNameTaken = "This user name is already taken."
-  toJSON InvalidUserName = "This user name is not valid."
-  toJSON AlreadyLoggedIn = "You already are logged in."
+instance MauMauServerError "LIE" LogInFailReason where
+  toErrorWithCode UserNameTaken = const (100, "This user name is already taken.")
+  toErrorWithCode InvalidUserName = const (110, "This user name is not valid.")
+  toErrorWithCode AlreadyLoggedIn = const (200, "You already are logged in.")
+
+data NoUserNameError = NoUserNameError
+
+instance MauMauServerError "MUN" NoUserNameError where
+  toErrorWithCode _ = const (100, "Provide your userName before other interaction.")
+
+newtype ParseError = ParseError Text
+
+instance MauMauServerError "GPE" ParseError where
+  toErrorWithCode (ParseError err) = const (100, Text.pack $ "You sent and invalid message. Error: " ++ show err)
+
+-- Error codes
+
+class (KnownSymbol prefix) => MauMauServerError (prefix :: Symbol) reason | prefix -> reason where
+  toErrorWithCode :: reason -> Proxy prefix -> (Int, Text)
+  toJSONError :: reason -> Proxy prefix -> Value
+  toJSONError reason proxy = object ["code" .= mconcat [Text.pack $ symbolVal proxy, "-", Text.pack $ show code], "message" .= message]
+   where
+    (code, message) = toErrorWithCode reason proxy
 
 -- Utils
 
@@ -219,3 +256,9 @@ requireField :: Key -> Object -> Parser Value
 requireField key obj = case AesonMap.lookup key obj of
   Nothing -> fail ("Missing a required field '" ++ show key ++ "'.")
   Just v -> pure v
+
+errorMsg :: forall errPrefix errReason. (MauMauServerError errPrefix errReason) => Text -> errReason -> Value
+errorMsg context reason = object ["type" .= context, "error" .= toJSONError reason (Proxy @errPrefix)]
+
+successMsg :: Text -> [Aeson.Pair] -> Value
+successMsg context fields = object (["type" .= context, "success" .= True] ++ fields)

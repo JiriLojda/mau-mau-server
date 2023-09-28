@@ -60,17 +60,36 @@ that is either [expected from a client](#client-sent-messages) or [sent to the c
 ## Server sent messages
 
 All the server-sent messages include a property `type` which you can use to determine the context of the message.
-Furthermore, a lot of messages have a successful variant that has a property `success` set to `true` and some other properties that you can discover below.
-Another common variant is an error message.
-This signals that either the [message itself is invalid](#invalid-message-error) or that it came with incorrect parameters or at an incorrect time (e.g. it is not your turn).
+Furthermore, there are two categories of messages, a success message and an error message. The successful variant has a property `success` set to `true` and some other properties that you can discover in the following sections. Success messages look like the following example.
+```json
+{ "type": "<message type>"
+, "success": true
+}
+```
+Depending on the message type the message object would contains additional properties.
 
-In the end there are two properties that uniquely identify each message, `type` and (the presence of either `error` or `success`).
+The error variant has an `error` property with an object that has two properties (`code` and `message`).
+The `code` contains a unique identifier for each error message, you can discover the code for any message in this document and use it to identify and process certain error messages in your code.
+The `message` property holds a human-readable message explaining the error.
+Use this to debug your application, the messages are not intended to be displayed in a UI application.
+An error message signals that either the received client message itself is [invalid](#invalid-message-error) or that it came with incorrect parameters or at an incorrect time (e.g. it is not your turn). Error messages look like the following example.
+```json
+{ "type": "<message type>"
+, "error":
+  { "code": "<error code>"
+  , "message": "<description of the occurred error>"
+  }
+}
+```
+
+In the end there are two properties that uniquely identify each message, `type` and (the presence of either `error` or `success`). 
+Then you can further distinguish between error messages leveraging the `error.code` property.
 
 ### Initiating connection to the server responses
 
 #### Log in successful
 
-Success message
+* Category: Success message
 * In response to the [login message](#log-in-message)
 * Properties:
   * `availableGameIds` - list of all created games currently on the server
@@ -84,23 +103,36 @@ Success message
 
 #### Log in failed
 
-Error message
+* Category: Error message
 * In response to the [login message](#log-in-message)
 * Audience: sender of the login message
+* Codes:
+  * `LIE-100` - The user name is already taken.
+  * `LIE-110` - The user name is not valid.
+  * `LIE-200` - The user is already logged in.
 ```json
 { "type": "logIn"
-, "error": "<description of the occurred error>"
+, "error": 
+  { "code": "<error code>"
+  , "message": "<description of the occurred error>"
+  }
 }
 ```
 
 #### Unexpected first message
 
 Error sent back when the first message a client sends is not the [login message](#log-in-message).
+* Category: Error message
 * In response to any message apart from the [login message](#log-in-message) at the start of the connection
 * Audience: sender of the login message
+* Codes:
+  * `MUN-100` - You need to provide the user name first.
 ```json
 { "type": "handshake"
-, "error": "Provide your userName before other interaction."
+, "error":  
+  { "code": "<error code>"
+  , "message": "<description of the occurred error>"
+  }
 }
 ```
 
@@ -108,7 +140,7 @@ Error sent back when the first message a client sends is not the [login message]
 
 #### Game created successfully
 
-Success message
+* Category: Success message
 * In response to the [create a game message](#creating-a-game)
 * Audience: all connected users
 
@@ -122,13 +154,17 @@ Success message
 
 #### Game creation error
 
-Error message
+* Category: Error message
 * In response to the [create a game message](#creating-a-game)
 * Audience: sender of the message
-
+* Codes:
+  * `CNG-100` - Already connected to a game.
 ```json
 { "type": "gameCreation"
-, "error": "<description of the occurred error>"
+, "error":  
+  { "code": "<error code>"
+  , "message": "<description of the occurred error>"
+  }
 }
 ```
 
@@ -136,7 +172,7 @@ Error message
 
 #### Successful connect
 
-Success message
+* Category: Success message
 * In response to the [connect to an existing game message](#connecting-to-an-existing-game)
 * Properties:
   * `usersInGame` - usernames of all users connected to the game (including the sender)
@@ -152,12 +188,19 @@ Success message
 
 #### Connecting to game error
 
-Error message
+* Category: Error message
 * In response to the [connect to an existing game message](#connecting-to-an-existing-game)
 * Audience: sender of the message
+* Codes:
+  * `CTG-100` - Provided game id does not exist.
+  * `CTG-200` - The game is already full.
+  * `CTG-300` - The game is already running.
 ```json
 { "type": "connectToGame"
-, "error": "<description of the occurred error>"
+, "error":  
+  { "code": "<error code>"
+  , "message": "<description of the occurred error>"
+  }
 }
 ```
 
@@ -165,7 +208,7 @@ Error message
 
 #### Successful disconnect
 
-Success message
+* Category: Success message
 * In response to the [disconnect from a game message](#disconnecting-from-a-game)
 * Audience: all connected users
 ```json
@@ -179,12 +222,17 @@ Success message
 
 #### Disconnect from game error
 
-Error message
+* Category: Error message
 * In response to the [disconnect from a game message](#disconnecting-from-a-game)
 * Audience: sender of the message
+* Codes:
+  * `DFG-100` - The user is not in any game.
 ```json
 { "type": "disconnectFromGame",
-, "error": "<description of the occurred error>"
+, "error":  
+  { "code": "<error code>"
+  , "message": "<description of the occurred error>"
+  }
 }
 ```
 
@@ -192,7 +240,7 @@ Error message
 
 #### Successful game start
 
-Success message
+* Category: Success message
 * In response to the [start a game message](#starting-a-game)
 * Audience: players of the game
 * Properties:
@@ -206,12 +254,21 @@ Success message
 
 #### Game start error
 
-Error message
+* Category: Error message
 * In response to the [disconnect from a game message](#disconnecting-from-a-game)
 * Audience: sender of the message
+* Codes:
+  * `SCG-100` - The user is not the creator of the game they are connected to.
+  * `SCG-200` - The game is already running.
+  * `SCG-210` - The game has already ended.
+  * `SCG-300` - The user is not connected to any game.
+  * `SCG-400` - There is not enough users to start the game.
 ```json
 { "type": "startGame"
-, "error": "<description of the occurred error>"
+, "error":  
+  { "code": "<error code>"
+  , "message": "<description of the occurred error>"
+  }
 }
 ```
 
@@ -219,7 +276,7 @@ Error message
 
 #### Successful turn result
 
-Success message
+* Category: Success message
 * In response to the [play a turn message](#playing-a-turn)
 * Audience: players of the game
 * Properties:
@@ -233,24 +290,43 @@ Success message
 
 #### Error when playing a turn
 
-Error message
+* Category: Error message
 * In response to the [play a turn message](#playing-a-turn)
 * Audience: sender of the message
+* Codes:
+  * `GTE-110` - It is someone else's turn.
+  * `GTE-200` - The user is not connected to any game.
+  * `GTE-210` - The game has not started yet.
+  * `GTE-220` - The game has already ended.
+  * `GTE-300` - Missing the `chosenSuite` property when playing a card of type `queen`.
+  * `GTE-310` - Don't include the `chosenSuite` property when not playing a card of type `queen`.
+  * `CIT-100` - Only an `ace` card can be played or the turn can be skipped.
+  * `CIT-110` - Only a `seven` card can be played or cards drawn.
+  * `CIT-120` - Only a `queen` card or a card with the chosen suite can be played.
+  * `CIT-130` - Skip is not possible.
+  * `CIT-200` - The game has already ended.
+  * `CIT-300` - The input state is not valid.
+  * `CIT-310` - The input is invalid.
+  * `CIT-400` - Cannot play cards that are not in the players hand.
 ```json
 { "type": "turn"
-, "error": "<description of the occurred error>"
+, "error":  
+  { "code": "<error code>"
+  , "message": "<description of the occurred error>"
+  }
 }
 ```
 
 #### Game ended turn result
 
-Success message
+* Category: Success message
 * In response to the [play a turn message](#playing-a-turn)
 * Audience: players of the game
 * Properties:
   * `state` - [`GameState`](#gamestate)
 ```json5
 { "type": "gameEnded"
+, "success": true
 , "state": GameState
 }
 ```
@@ -258,11 +334,17 @@ Success message
 ### Invalid message error
 
 This is a general error sent when the message provided by client is invalid (e.g. missing a required property or invalid json).
+* Category: Error message
 * In response to any invalid message
 * Audience: sender of the message
+* Code:
+  * `GPE-100` - Unable to parse the message.
 ```json
 { "type": "error"
-, "error": "<description of the occurred error>"
+, "error":  
+  { "code": "<error code>"
+  , "message": "<description of the occurred error>"
+  }
 }
 ```
 

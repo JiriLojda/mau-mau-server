@@ -12,7 +12,7 @@ module Server.ResponseModels (
   suiteToAppModel,
   -- Error reasons
   InvalidStateReason,
-  InvalidTurnReason,
+  InvalidTurnReason (..),
   fromAppInvalidStateReason,
   fromAppInvalidTurnReason,
 ) where
@@ -197,15 +197,15 @@ data InvalidTurnReason
   | InvalidInput
   | CanOnlyPlayCardsFromHand
 
-instance ToJSON InvalidTurnReason where
-  toJSON OnlyAceOrSkip = "You can only play an ace or skip the turn."
-  toJSON OnlySevenOrDraw = "You can only play a seven or draw cards."
-  toJSON (OnlyQueenOr t s) = toJSON ("You can only play a Queen or a card of type " ++ show (toJSON t) ++ " or a card with suite " ++ show (toJSON s) ++ ".")
-  toJSON GameHadEnded = "The game has already ended."
-  toJSON SkipIsNotPossible = "It is currently not possible to skip."
-  toJSON (InvalidInputState reason) = toJSON ("The game state is invalid, because: " ++ show (toJSON reason))
-  toJSON InvalidInput = "The provided input is not valid."
-  toJSON CanOnlyPlayCardsFromHand = "You can only play cards from your hand."
+instance Show InvalidTurnReason where
+  show OnlyAceOrSkip = "You can only play an ace or skip the turn."
+  show OnlySevenOrDraw = "You can only play a seven or draw cards."
+  show (OnlyQueenOr t s) = "You can only play a Queen or a card of type " ++ show (toJSON t) ++ " or a card with suite " ++ show (toJSON s) ++ "."
+  show GameHadEnded = "The game has already ended."
+  show SkipIsNotPossible = "It is currently not possible to skip."
+  show (InvalidInputState reason) = "The game state is invalid, because: " ++ show (toJSON reason)
+  show InvalidInput = "The provided input is not valid."
+  show CanOnlyPlayCardsFromHand = "You can only play cards from your hand."
 
 data InvalidStateReason
   = NonMatchingTopCardState
