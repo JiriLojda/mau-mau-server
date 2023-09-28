@@ -82,9 +82,12 @@ handleMessage userName conn stateVar = do
     Msg.ConnectToGame rawGameId -> do
       (newState, msgToSend) <- STM.atomically $ do
         state <- STM.readTVar stateVar
-        case State.isGameId rawGameId state of
-          Nothing -> pure (state, SingleUser conn $ Msg.ConnectResponse . Left . Msg.GameIdNotFound $ rawGameId)
-          Just (gameId, State.WaitingForPlayers game) ->
+        case (State.isGameId rawGameId state, State.userGame userName state) of
+          (Nothing, _) -> pure (state, SingleUser conn . Msg.ConnectResponse . Left . Msg.GameIdNotFound $ rawGameId)
+          (Just (gameIdToJoin, _), Just joinedGame)
+            | gameIdToJoin == State.getGameId joinedGame -> pure (state, SingleUser conn . Msg.ConnectResponse . Left $ Msg.AlreadyConnected)
+            | otherwise -> pure (state, SingleUser conn . Msg.ConnectResponse . Left . Msg.AlreadyConnectedToAnotherGame . State.gameIdToText . State.getGameId $ joinedGame)
+          (Just (gameId, State.WaitingForPlayers game), Nothing) ->
             case State.addUser userName game of
               Left _ -> pure (state, SingleUser conn $ Msg.ConnectResponse $ Left $ Msg.TooManyPlayers Constants.maxUsersInGame)
               Right newGame -> do

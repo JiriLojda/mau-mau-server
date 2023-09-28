@@ -194,6 +194,8 @@ Error sent back when the first message a client sends is not the [login message]
 * Codes:
   * `CTG-100` - Provided game id does not exist.
   * `CTG-200` - The game is already full.
+  * `CTG-210` - The user is already connected to another game.
+  * `CTG-220` - The user is already connected to the game.
   * `CTG-300` - The game is already running.
 ```json
 { "type": "connectToGame"

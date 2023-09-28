@@ -215,10 +215,14 @@ data ConnectFailReason
   = GameIdNotFound Text
   | TooManyPlayers Int
   | GameIsRunning
+  | AlreadyConnectedToAnotherGame Text
+  | AlreadyConnected
 
 instance MauMauServerError "CTG" ConnectFailReason where
-  toErrorWithCode (GameIdNotFound gameId) = const (100, Text.pack $ "The game id '" ++ show gameId ++ "' doesn't exist.")
-  toErrorWithCode (TooManyPlayers amount) = const (200, Text.pack $ "The game already has the maximum of " ++ show amount ++ " players.")
+  toErrorWithCode (GameIdNotFound gameId) = const (100, mconcat ["The game id '", gameId, "' doesn't exist."])
+  toErrorWithCode (TooManyPlayers amount) = const (200, mconcat ["The game already has the maximum of ", Text.pack $ show amount, " players."])
+  toErrorWithCode (AlreadyConnectedToAnotherGame gameId) = const (210, mconcat ["You are already connected to a game with id '", gameId, "'."])
+  toErrorWithCode AlreadyConnected = const (220, "You are already connected to this game.")
   toErrorWithCode GameIsRunning = const (300, "The game is already running and doesn't accept new players")
 
 data LogInFailReason
